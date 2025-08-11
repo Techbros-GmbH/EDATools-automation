@@ -5,7 +5,7 @@ from typing import Any, Iterable, Tuple
 
 import pandas as pd
 from loguru import logger
-from parsing_config import (
+from .parsing_config import (
     STREAMING_AGG_RULES,
     STREAMING_DESIRED_ORDER,
     STREAMING_MEAN_COLS,

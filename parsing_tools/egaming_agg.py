@@ -5,7 +5,7 @@ from typing import Any
 
 import pandas as pd
 from loguru import logger
-from parsing_config import GAMING_AGG_RULES, GAMING_DESIRED_ORDER, GAMING_MEAN_COLS
+from .parsing_config import GAMING_AGG_RULES, GAMING_DESIRED_ORDER, GAMING_MEAN_COLS
 
 
 class EgamingAggregator:

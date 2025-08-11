@@ -5,70 +5,33 @@ from typing import Any, List, Tuple
 
 import pandas as pd
 from loguru import logger
-from parsing_config import (
-    MOS_OTT_AGG_RULES,
-    MOS_OTT_COLUMNS_AFTER_FFILL,
-    MOS_OTT_COLUMNS_TO_FILL,
-    MOS_OTT_DESIRED_ORDER,
-    MOS_OTT_MEAN_COLS,
+from .parsing_config import (
+    MOS_M2M_AGG_RULES,
+    MOS_M2M_COLS_AFTER_FFILL,
+    MOS_M2M_COLUMNS_TO_FILL,
+    MOS_M2M_DESIRED_ORDER,
+    MOS_M2M_MEAN_COLS,
 )
 
-class OTTAggregator:
+class MOSM2MAggregator:
     def __init__(self, mcc_mnc_df: pd.DataFrame | None = None):
         self.mcc_mnc_df = mcc_mnc_df
 
-    def _load_file(self, file_obj, filename: str) -> pd.DataFrame | None:
-        try:
-            df = pd.read_excel(file_obj)
-
-            # MCC/MNC fill
-            for col in ("MCC", "MNC"):
-                if col in df.columns:
-                    df[col] = pd.to_numeric(df[col], errors="coerce")
-                    first_nonnull = (
-                        df[col].dropna().iloc[0] if not df[col].dropna().empty else None
-                    )
-                    df[col] = df[col].fillna(first_nonnull)
-
-            # Parse from filename
-            base = filename.rsplit(".", 1)[0]
-            parts = base.split("_")
-            df["Country"] = parts[1] if len(parts) > 1 else "Unknown"
-            df["Operator1"] = parts[3] if len(parts) > 3 else "Unknown"
-            df["Test Name"] = (
-                f"{parts[2][-3:]}_{parts[3]}" if len(parts) > 3 else "Unknown"
-            )
-
-            # Side from IMSI marker in filename
-            m = re.search(r"IMSI[_\-]?\s*0*(\d+)", base, flags=re.IGNORECASE)
-            if m:
-                n = m.group(1)
-                df["Side"] = (
-                    "Side A" if n == "1" else ("Side B" if n == "2" else f"IMSI{n}")
-                )
-            else:
-                df["Side"] = None
-
-            # Type Mobility
-            if "BMTT" in base:
-                df["Type Mobility"] = "Test Train"
-            elif "BMWT" in base:
-                df["Type Mobility"] = "Walk Test"
-            elif "BMDT" in base:
-                df["Type Mobility"] = "Drive Test"
-            else:
-                df["Type Mobility"] = "Unknown"
-
-            df["__source_file__"] = filename
-            logger.info(f"Loaded: {filename}")
-            return df
-        except Exception as e:
-            logger.error(f"Failed to read {filename}: {e}")
+    @staticmethod
+    def _extract_side_from_basename(base_name: str) -> str | None:
+        m = re.search(r"IMSI[_\-]?\s*0*(\d+)", base_name, flags=re.IGNORECASE)
+        if not m:
             return None
+        n = m.group(1)
+        if n == "1":
+            return "Side A"
+        if n == "2":
+            return "Side B"
+        return f"IMSI{n}"
 
     @staticmethod
-    def _numeric_cast(df: pd.DataFrame) -> pd.DataFrame:
-        for col in MOS_OTT_MEAN_COLS:
+    def _safe_numeric_cast(df: pd.DataFrame) -> pd.DataFrame:
+        for col in MOS_M2M_MEAN_COLS:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors="coerce")
         return df
@@ -89,85 +52,135 @@ class OTTAggregator:
             return "Qualified"
         return "Not Qualified"
 
+    def _load_file(self, file_obj, filename: str) -> pd.DataFrame | None:
+        try:
+            df = pd.read_excel(file_obj)
+
+            # MCC / MNC fill
+            for col in ("MCC", "MNC"):
+                if col in df.columns:
+                    df[col] = pd.to_numeric(df[col], errors="coerce")
+                    first_val_nonnull = (
+                        df[col].dropna().iloc[0] if not df[col].dropna().empty else None
+                    )
+                    df[col] = df[col].fillna(first_val_nonnull)
+
+            # Basic name parsing
+            base_name = filename.rsplit(".", 1)[0]
+            parts = base_name.split("_")
+            df["Country"] = parts[1] if len(parts) > 1 else "Unknown"
+            df["Operator1"] = parts[3] if len(parts) > 3 else "Unknown"
+            df["Test Name"] = (
+                f"{parts[2][-3:]}_{parts[3]}" if len(parts) > 3 else "Unknown"
+            )
+
+            # Side from filename
+            df["Side"] = self._extract_side_from_basename(base_name)
+
+            # Type Mobility
+            if "BMTT" in base_name:
+                df["Type Mobility"] = "Test Train"
+            elif "BMWT" in base_name:
+                df["Type Mobility"] = "Walk Test"
+            elif "BMDT" in base_name:
+                df["Type Mobility"] = "Drive Test"
+            else:
+                df["Type Mobility"] = "Unknown"
+
+            df["__source_file__"] = filename
+            logger.info(f"Loaded: {filename}")
+            return df
+        except Exception as e:
+            logger.error(f"Failed to read {filename}: {e}")
+            return None
+
     def process(self, files: List[Tuple[BytesIO, str]]) -> dict[str, BytesIO]:
-        # Load
+        """
+        files: list of (file_obj, filename)
+        returns: {country: BytesIO excel}
+        """
+        # Load all files
         with ThreadPoolExecutor(max_workers=4) as ex:
             df_list = list(ex.map(lambda f: self._load_file(*f), files))
         df_list = [d for d in df_list if d is not None]
         if not df_list:
-            raise ValueError("No MOS OTT raw files loaded.")
+            raise ValueError("No MOS M2M raw files loaded.")
+
         df = pd.concat(df_list, ignore_index=True)
 
-        # Ensure column exists
+        # Prepare columns we will use
         if "VoiceLogfileName" not in df.columns:
             df["VoiceLogfileName"] = None
 
-        # Segment sessions by (Side, Operator1), backfill VoiceLogfileName upward until DeviceDescription
+        # --------- segmentation (per Side + Operator1) ---------
         df["Test Id"] = None
         df["VoiceLogfileName_filled"] = None
 
-        for (side_name, operator), grp in df.groupby(
+        for (side_name, operator), group in df.groupby(
             ["Side", "Operator1"], dropna=False
         ):
             test_id_counter = 1
-            for i in grp.index:
-                if pd.notnull(df.loc[i, "VoiceLogfileName"]):
-                    vlog = df.loc[i, "VoiceLogfileName"]
-                    seg_rows = []
+            for i in group.index:
+                voicelog = df.loc[i, "VoiceLogfileName"]
+                if pd.notnull(voicelog):
+                    # walk backwards inside this (Side, Operator1) chunk until DeviceDescription
+                    segment_rows = []
                     j = i
-                    while j >= grp.index.min():
+                    while j >= group.index.min():
                         if (
                             df.loc[j, "Side"] != side_name
                             or df.loc[j, "Operator1"] != operator
                         ):
                             break
-                        seg_rows.append(j)
+                        segment_rows.append(j)
                         if "DeviceDescription" in df.columns and pd.notnull(
                             df.loc[j, "DeviceDescription"]
                         ):
                             break
                         j -= 1
-                    if not seg_rows:
+                    if not segment_rows:
                         continue
-                    for idx in seg_rows:
-                        df.at[idx, "VoiceLogfileName_filled"] = vlog
+
+                    for idx in segment_rows:
+                        df.at[idx, "VoiceLogfileName_filled"] = voicelog
                         df.at[idx, "Test Id"] = f"Test {test_id_counter}"
                     test_id_counter += 1
 
-        # index_id for rows with AQM Score (per Test Id, Side)
+        # index_id assignment where AQM Score not null, per (Test Id, Side)
         df["index_id"] = None
-        for (tid, side), grp in df.groupby(["Test Id", "Side"], dropna=False):
+        for (test_id, side), group in df.groupby(["Test Id", "Side"], dropna=False):
             valid = (
-                grp["AQM Score"].notnull()
-                if "AQM Score" in grp.columns
-                else pd.Series(False, index=grp.index)
+                group["AQM Score"].notnull()
+                if "AQM Score" in group.columns
+                else pd.Series(False, index=group.index)
             )
-            idx = grp[valid].index
+            idx = group[valid].index
             df.loc[idx, "index_id"] = range(1, len(idx) + 1)
 
         # backfill index_id within (Test Id, Side)
-        for (tid, side), grp in df.groupby(["Test Id", "Side"], dropna=False):
-            gi = grp.index
+        for (test_id, side), group in df.groupby(["Test Id", "Side"], dropna=False):
+            gi = group.index
             df.loc[gi, "index_id"] = df.loc[gi, "index_id"].bfill()
 
         # forward/backward fill within groups
-        for col in MOS_OTT_COLUMNS_TO_FILL:
+
+        for col in MOS_M2M_COLUMNS_TO_FILL:
             if col in df.columns:
                 df[col] = df.groupby(
                     ["Test Id", "VoiceLogfileName_filled"], dropna=False
                 )[col].ffill()
 
-        for col in MOS_OTT_COLUMNS_AFTER_FFILL:
+        for col in MOS_M2M_COLS_AFTER_FFILL:
             if col in df.columns:
                 df[col] = df.groupby(
                     ["Test Id", "VoiceLogfileName_filled"], dropna=False
                 )[col].bfill()
 
-        # numeric cast
-        df = self._numeric_cast(df)
+        # numeric cast for mean cols
+        df = self._safe_numeric_cast(df)
 
         # reduce agg rules to available columns
-        agg_rules = {k: v for k, v in MOS_OTT_AGG_RULES.items() if k in df.columns}
+        agg_rules = {k: v for k, v in MOS_M2M_AGG_RULES.items() if k in df.columns}
 
         # aggregate
         agg_df = (
@@ -189,11 +202,11 @@ class OTTAggregator:
             except Exception as e:
                 logger.warning(f"MCC/MNC mapping failed: {e}")
 
-        # Sequence (Austria/Bremen only)
+        # Sequence (Austria/Bremen)
         def _seq(row: pd.Series) -> Any:
             if str(row.get("Country", "")).strip() not in {"Austria", "Bremen"}:
                 return None
-            m = re.search(r"(OTT_\d+)", str(row.get("VoiceLogfileName_filled", "")))
+            m = re.search(r"(Voice_\d+)", str(row.get("VoiceLogfileName_filled", "")))
             return m.group(1) if m else None
 
         agg_df["Sequence"] = agg_df.apply(_seq, axis=1)
@@ -201,15 +214,13 @@ class OTTAggregator:
         # qualifier
         agg_df["Qualifier"] = agg_df.apply(self._evaluate_qualification, axis=1)
 
-        # rename + sort + reorder
+        # rename + reorder
         agg_df = agg_df.rename(columns={"VoiceLogfileName_filled": "VoiceLogfileName"})
-        if "Side" in agg_df.columns and "Date Time" in agg_df.columns:
-            agg_df = agg_df.sort_values(by=["Side", "Date Time"])
-        cols = [c for c in MOS_OTT_DESIRED_ORDER if c in agg_df.columns]
-        if cols:
-            agg_df = agg_df[cols]
+        columns = [c for c in MOS_M2M_DESIRED_ORDER if c in agg_df.columns]
+        if columns:
+            agg_df = agg_df[columns]
 
-        # to memory per country
+        # export to memory per country
         if "Country" not in agg_df.columns:
             raise ValueError("'Country' column is missing before exporting.")
 
@@ -220,6 +231,7 @@ class OTTAggregator:
             buf.seek(0)
             safe = str(country).replace("/", "-").replace(" ", "_")
             outputs[safe] = buf
+
         return outputs
 
 
@@ -231,18 +243,18 @@ if __name__ == "__main__":
     except FileNotFoundError:
         mcc_mnc_df = None
 
-    input_folder = "./input_ott_files"
+    input_folder = "./input_m2m_files"
     files = []
     if os.path.isdir(input_folder):
         for fname in os.listdir(input_folder):
-            if fname.endswith(".xlsx") and "MOS_OTT" in fname and "clean" not in fname:
+            if fname.endswith(".xlsx") and "MOS_M2M" in fname and "clean" not in fname:
                 files.append((open(os.path.join(input_folder, fname), "rb"), fname))
 
-    agg = OTTAggregator(mcc_mnc_df)
+    agg = MOSM2MAggregator(mcc_mnc_df)
     outputs = agg.process(files)
 
     for country, buf in outputs.items():
-        out = f"MOS_OTT_{country}_clean.xlsx"
+        out = f"MOS_M2M_{country}_clean.xlsx"
         with open(out, "wb") as f:
             f.write(buf.read())
         logger.info(f"Saved: {out}")

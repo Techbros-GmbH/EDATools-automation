@@ -4,7 +4,7 @@ from io import BytesIO
 
 import pandas as pd
 from loguru import logger
-from parsing_config import DNS_AGG_RULES, DNS_DESIRED_ORDER, DNS_MEAN_COLS
+from .parsing_config import DNS_AGG_RULES, DNS_DESIRED_ORDER, DNS_MEAN_COLS
 
 
 class DNSAggregator:

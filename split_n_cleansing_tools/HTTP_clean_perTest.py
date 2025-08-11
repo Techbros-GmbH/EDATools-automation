@@ -329,8 +329,6 @@ master_rename_map = {
     "Qualifier": "Qualifier",
     "Time to Transfer 1000 kB": "Time to Transfer 1000 kB",
     "Overall Session Time (s) DNS Request to first 1000kb": "Overall Session Time (s) DNS Request to first 1000kb"
-
-
 }
 df.rename(columns=master_rename_map, inplace=True)
 
@@ -1255,12 +1253,12 @@ for test_name, test_group in df.groupby("Test Name"):
         continue
 
     selected_columns = schema_groups[group_key] + ["Test_IDs"]
-    
+
     # Force Test_IDs to 3rd position
     if "Test_IDs" in selected_columns:
         selected_columns.remove("Test_IDs")
         selected_columns.insert(2, "Test_IDs")
-    
+
     # Filter columns
     filtered_group = test_group[selected_columns]
 

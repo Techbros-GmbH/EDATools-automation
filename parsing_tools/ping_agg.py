@@ -5,7 +5,7 @@ from typing import List, Tuple
 
 import pandas as pd
 from loguru import logger
-from parsing_config import (
+from .parsing_config import (
     PING_AGG_RULES,
     PING_DESIRED_ORDER,
     PING_MEAN_COLS,

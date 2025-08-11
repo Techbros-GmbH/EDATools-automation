@@ -7,7 +7,7 @@ from typing import Any, Iterable, Tuple
 
 import pandas as pd
 from loguru import logger
-from parsing_config import (
+from .parsing_config import (
     VIDEOCHAT_AGG_RULES,
     VIDEOCHAT_DESIRED_ORDER,
     VIDEOCHAT_MEAN_COLS,
