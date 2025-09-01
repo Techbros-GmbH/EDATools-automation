@@ -14,8 +14,9 @@ from .parsing_config import (
 )
 
 class MOSM2MAggregator:
-    def __init__(self, mcc_mnc_df: pd.DataFrame | None = None):
+    def __init__(self, mcc_mnc_df: pd.DataFrame | None = None, test_case_df: pd.DataFrame | None = None):
         self.mcc_mnc_df = mcc_mnc_df
+        self.test_case_df = test_case_df
 
     @staticmethod
     def _extract_side_from_basename(base_name: str) -> str | None:

@@ -2,7 +2,7 @@ import argparse
 import uvicorn
 from uvicorn.config import LOGGING_CONFIG
 
-# python /home/daffa/dataset_maker/services/cge_runner.py
+# python /Users/daffaarifadilah/techbros/fInal_parsing/Code/services/eda_tools_runner.py -p 4720 --host 0.0.0.0 -w 1
 
 def get_args():
     parser = argparse.ArgumentParser(

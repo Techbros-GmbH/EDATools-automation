@@ -14,8 +14,9 @@ from .parsing_config import (
 )
 
 class MOSOTTAggregator:
-    def __init__(self, mcc_mnc_df: pd.DataFrame | None = None):
+    def __init__(self, mcc_mnc_df: pd.DataFrame | None = None, test_case_df=None):
         self.mcc_mnc_df = mcc_mnc_df
+        self.test_case_df = test_case_df
 
     def _load_file(self, file_obj, filename: str) -> pd.DataFrame | None:
         try:

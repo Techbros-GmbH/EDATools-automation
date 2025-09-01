@@ -1,13 +1,15 @@
 OPERATOR_CODES = {
-    "Telefonica DE": 1,
-    "Vodafone DE": 2,
+    "Telefonica DE": 2,
+    "Vodafone DE": 1,
     "Deutsche Telekom": 3,
-    "Magenta Telekom": 1,
-    "A1 Telekom Austria": 2,
-    "Drei Austria": 3,
-    "M1": 1,
-    "Singtel": 2,
-    "Starhub": 3,
+    "1u1inTEF": 4,
+    "1u1iVDF": 5,
+    "Magenta": 9,
+    "A1 Telekom Austria": 11,
+    "Drei Austria": 10,
+    "M1": 6,
+    "Singtel": 7,
+    "Starhub": 8,
 }
 
 TEST_NAME_CODES = {
@@ -21,5 +23,11 @@ TEST_NAME_CODES = {
     "YoutubeLIVE": 11,
     "Ping 800": 14,
     "Ping 40": 14,
+    "Ping 56": 14,
+    "Ping 1000": 14,
     "DNS": 15,
+    "MOS_M2M": 1,
+    "Data_VideoChat": 13,
+    "Voice_M2M": 1,
+    "Voice_OTT": 2
 }

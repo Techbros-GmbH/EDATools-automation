@@ -13,8 +13,9 @@ from .parsing_config import (
 
 
 class PingAggregator:
-    def __init__(self, mcc_mnc_df: pd.DataFrame | None = None):
+    def __init__(self, mcc_mnc_df: pd.DataFrame | None = None, test_case_df: pd.DataFrame | None =None):
         self.mcc_mnc_df = mcc_mnc_df
+        self.test_case_df = test_case_df
 
     def _load_file(self, file_obj, filename: str) -> pd.DataFrame | None:
         try:
@@ -198,6 +199,7 @@ class PingAggregator:
                 mcc = self.mcc_mnc_df.copy()
                 mcc.columns = mcc.columns.str.strip()
                 agg_df.columns = agg_df.columns.str.strip()
+                logger.debug("mcc_mnc_df sucessfully loaded")
 
                 mcc["MNC"] = (
                     pd.to_numeric(mcc["MNC"], errors="coerce")

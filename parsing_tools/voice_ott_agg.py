@@ -29,8 +29,10 @@ class VoiceOTTAggregator:
     def __init__(
         self,
         mcc_mnc_df: pd.DataFrame | None = None,
+        test_case_df: pd.DataFrame | None = None,
     ):
         self.mcc_mnc_df = mcc_mnc_df
+        self.test_case_df = test_case_df
 
     def _load_file(self, file_obj, filename: str) -> pd.DataFrame | None:
         try:

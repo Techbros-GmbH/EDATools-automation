@@ -26,8 +26,9 @@ class VoiceM2MAggregator:
           open(f"Voice_M2M_{country}_clean.xlsx","wb").write(buf.read())
     """
 
-    def __init__(self, mcc_mnc_df: pd.DataFrame | None = None):
+    def __init__(self, mcc_mnc_df: pd.DataFrame | None = None, test_case_df: pd.DataFrame | None =None):
         self.mcc_mnc_df = mcc_mnc_df
+        self.test_case_df = test_case_df
 
     # ----------------- loaders & helpers -----------------
 

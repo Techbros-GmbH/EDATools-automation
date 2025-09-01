@@ -26,9 +26,10 @@ class VideoChatAggregator:
       dict[country -> BytesIO]
     """
 
-    def __init__(self, mcc_mnc_df: pd.DataFrame | None = None, max_workers: int = 4):
+    def __init__(self, mcc_mnc_df: pd.DataFrame | None = None, test_case_df: pd.DataFrame | None = None, max_workers=4):
         self.mcc_mnc_df = mcc_mnc_df
         self.max_workers = max_workers
+        self.test_case_df = test_case_df
 
     # ---------- helpers ----------
 

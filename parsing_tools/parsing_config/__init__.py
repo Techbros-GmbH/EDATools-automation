@@ -1,4 +1,3 @@
-# parsing_tools/parsing_config/__init__.py
 from .config_dns import DNS_AGG_RULES, DNS_DESIRED_ORDER, DNS_MEAN_COLS
 from .config_gaming import GAMING_AGG_RULES, GAMING_DESIRED_ORDER, GAMING_MEAN_COLS
 from .config_http import HTTP_AGG_RULES, HTTP_DESIRED_ORDER, HTTP_MEAN_COLS

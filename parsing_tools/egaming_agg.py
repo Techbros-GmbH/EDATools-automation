@@ -9,8 +9,9 @@ from .parsing_config import GAMING_AGG_RULES, GAMING_DESIRED_ORDER, GAMING_MEAN_
 
 
 class EgamingAggregator:
-    def __init__(self, mcc_mnc_df=None):
+    def __init__(self, mcc_mnc_df=None, test_case_df=None):
         self.mcc_mnc_df = mcc_mnc_df
+        self.test_case_df = test_case_df
 
     def _load_file(self, file_obj, filename):
         try:
