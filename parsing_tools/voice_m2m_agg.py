@@ -30,7 +30,6 @@ class VoiceM2MAggregator:
         self.mcc_mnc_df = mcc_mnc_df
         self.test_case_df = test_case_df
 
-    # ----------------- loaders & helpers -----------------
 
     def _load_file(self, file_obj, filename: str) -> pd.DataFrame | None:
         try:

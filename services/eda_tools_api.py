@@ -50,7 +50,6 @@ _NAME_MAP = {
 
 
 
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -81,7 +80,7 @@ def make_packager(kind: str):
     kind = (kind or "").lower()
     try:
         cls_names = _NAME_MAP[kind]
-        cls_name = cls_names[1]              # Packager class name
+        cls_name = cls_names[1]
         cls = getattr(cleaner, cls_name)
     except KeyError:
         raise HTTPException(status_code=400, detail=f"Unknown type_test for packager: {kind}")
@@ -300,25 +299,25 @@ async def agg(
     The function infers the type of test from the filenames and processes
     the files accordingly. It supports
 
-    - `dns`
+    - DNS testing data (filename contains `dns`)
 
-    - `http`
+    - HTTP testing data (filename contains `http`)
 
-    - `ping`
+    - E-gaming performance data (filename contains `egaming`)
 
-    - `egaming`
+    - Ping/latency data (filename contains `ping`)
 
-    - `streaming`
+    - Streaming quality data (filename contains `streaming`)
 
-    - `videochat`
+    - Video chat data (filename contains `videochat`)
 
-    - `voice_m2m`
+    - Voice M2M data (filename contains `voice_m2m`)
 
-    - `voice_ott`
+    - Voice OTT data (filename contains `voice_ott`)
 
-    - `mos_m2m`
+    - MOS M2M data (filename contains `mos_m2m`)
 
-    - `mos_ott`
+    - MOS OTT data (filename contains `mos_ott`)
 
     The processed data is returned as a downloadable file or a zip archive containing files for each country and type cases if multiple test cases are uploaded.
 
@@ -413,14 +412,77 @@ async def agg(
     headers = {"Content-Disposition": 'attachment; filename="aggregated_outputs.zip"'}
     return StreamingResponse(mem_zip, media_type="application/zip", headers=headers)
 
-@app.post("/v1/packager", tags=["endpoints"])
-async def packager_only(
+@app.post("/v1/cleaner", tags=["endpoints"])
+async def split_n_cleansing(
     files: List[UploadFile] = File(..., description="One or more Excel files (already in split/cleansed form or raw as expected by the Packager)"),
-    force_type: str | None = Query(default=None, description=f"Force a type_test for all files. One of: {', '.join(_NAME_MAP.keys())}"),
 ):
     """
-    Run only the packager (split_n_cleansing_tools.<*Packager>) on uploaded files.
-    This skips the aggregator stage and directly processes inputs with the packager.
+    Split and Clean your test data files.
+
+    **IMPORTANT:** This endpoint expects files that have already been processed through
+    the aggregation step (via `/v1/parse` endpoint). Do not upload raw CDR data here.
+
+    This endpoint processes your uploaded Excel files using specialized cleaning algorithms.
+    It automatically detects what type of test data you're uploading based on the filename
+    and applies the appropriate cleaning and packaging operations.
+
+    **What it does:**
+    - Takes your pre-aggregated Excel files (already processed through aggregation)
+    - Cleans and standardizes the data format
+    - Packages the results into downloadable Excel files
+    - Returns everything in a convenient ZIP archive
+
+    **Supported test types (detected from filename):**
+
+    - DNS testing data (filename contains `dns`)
+
+    - HTTP testing data (filename contains `http`)
+
+    - E-gaming performance data (filename contains `egaming`)
+
+    - Ping/latency data (filename contains `ping`)
+
+    - Streaming quality data (filename contains `streaming`)
+
+    - Video chat data (filename contains `videochat`)
+
+    - Voice M2M data (filename contains `voice_m2m`)
+
+    - Voice OTT data (filename contains `voice_ott`)
+
+    - MOS M2M data (filename contains `mos_m2m`)
+
+    - MOS OTT data (filename contains `mos_ott`)
+
+
+    **How to use:**
+    1. First, process your raw data through `/v1/parse` endpoint to aggregate it
+    2. Upload the aggregated Excel (.xlsx) files from step 1 to this endpoint
+    3. Make sure each filename contains one of the supported test type keywords
+    4. Download the ZIP file containing your cleaned data
+
+    **Example filenames:**
+
+    - `dns_test_singapore.xlsx` → Will be processed as DNS data
+
+    - `HTTP_Performance_Austria.xlsx` → Will be processed as HTTP data
+
+    - `streaming_quality_results.xlsx` → Will be processed as Streaming data
+
+    Args:
+        files: Pre-aggregated Excel files (output from `/v1/parse` endpoint).
+               Each file must have a filename containing a supported test type keyword.
+
+    Returns:
+        A ZIP file download containing the cleaned Excel files, ready for analysis.
+
+    Error cases:
+
+        - 400: No files uploaded or files are empty
+
+        - 400: Cannot determine test type from filename (missing keyword)
+
+        - 500: Processing failed due to data format issues
     """
     if not files:
         raise HTTPException(400, "No files uploaded")
@@ -434,28 +496,22 @@ async def packager_only(
 
         filename = uf.filename or "uploaded.xlsx"
         inferred_type = None
-        if force_type:
-            inferred_type = force_type.lower()
-            if inferred_type not in _NAME_MAP:
-                raise HTTPException(400, f"force_type '{force_type}' is not supported. Allowed: {', '.join(_NAME_MAP.keys())}")
-        else:
-            for key in _NAME_MAP:
-                if key in filename.lower():
-                    inferred_type = key
-                    break
-            if not inferred_type:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Could not infer type_test from filename: {filename}. "
-                           f"Either include a known type in the filename or set ?force_type=...",
-                )
+
+        for key in _NAME_MAP:
+            if key in filename.lower():
+                inferred_type = key
+                break
+        if not inferred_type:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Could not infer type_test from filename: {filename}. "
+                        f"Either include a known type in the filename or set ?force_type=...",
+            )
 
         typed_files.setdefault(inferred_type, []).append((content, filename))
 
     if not typed_files:
         raise HTTPException(400, "Uploaded files were empty")
-
-    # Run packagers in parallel by type
     loop = asyncio.get_running_loop()
     max_workers = max(len(typed_files), (os.cpu_count() or 2))
 
@@ -478,7 +534,7 @@ async def packager_only(
             type_test, outputs = res  # Dict[filename -> bytes]
             for final_name, excel_bytes in outputs.items():
                 # Namespace inside zip by type for clarity
-                safe_name = f"{type_test.upper()}__{final_name}"
+                safe_name = f"{type_test.upper()}_{final_name}"
                 zf.writestr(safe_name, excel_bytes)
 
     mem_zip.seek(0)
@@ -486,15 +542,84 @@ async def packager_only(
     return StreamingResponse(mem_zip, media_type="application/zip", headers=headers)
 # --- NEW ENDPOINT: SPLIT_N_CLEANSING ---
 
-@app.post("/v1/split_n_cleansing", tags=["pipeline"])
-async def split_n_cleansing(
+@app.post("/v1/pipeline_cleaner", tags=["pipeline"])
+async def pipeline_cleaner(
     files: List[UploadFile] = File(..., description="One or more Excel files"),
 ):
     """
-    End-to-end pipeline:
-      - Aggregate uploaded files via parsing_tools.<*Aggregator>
-      - Feed results to split_n_cleansing_tools.<*Packager>
-      - Return final packaged outputs (zipped)
+    Complete data processing pipeline: Aggregate → Clean & Parsing
+
+    This is the full end-to-end processing pipeline that takes your raw test data files,
+    aggregates them by country and test type, then splits and cleans the results.
+    Perfect for processing fresh data exports that need both aggregation and cleaning.
+
+    **What it does:**
+    1. **Aggregate**: Combines and organizes your raw data by country and test type
+    2. **Clean**: Standardizes data formats and removes inconsistencies
+    4. **Deliver**: Returns all results in a single ZIP download
+
+    **When to use this endpoint:**
+    - You have raw CDR (Call Detail Record) data that needs full processing
+    - Your data needs to be grouped by countries or regions
+    - You want both aggregation and cleaning in one step
+    - You're processing fresh exports from network monitoring tools
+
+    **Supported test types (detected from filename):**
+    
+    - DNS testing data (filename contains `dns`)
+
+    - HTTP testing data (filename contains `http`)
+
+    - E-gaming performance data (filename contains `egaming`)
+
+    - Ping/latency data (filename contains `ping`)
+
+    - Streaming quality data (filename contains `streaming`)
+
+    - Video chat data (filename contains `videochat`)
+
+    - Voice M2M data (filename contains `voice_m2m`)
+
+    - Voice OTT data (filename contains `voice_ott`)
+
+    - MOS M2M data (filename contains `mos_m2m`)
+
+    - MOS OTT data (filename contains `mos_ott`)
+
+    **How to use:**
+    1. Upload your raw Excel data files
+    2. Ensure filenames contain test type keywords (e.g., "dns", "http", etc.)
+    3. Wait for processing to complete (runs in parallel for speed)
+    4. Download the ZIP containing your processed data
+
+    **Example workflow:**
+    Upload: `raw_dns_data_singapore.xlsx`, `raw_http_data_austria.xlsx`
+    →  Processing aggregates data by country and test type
+    →  Download: `pipeline_outputs.zip` containing clean, analysis-ready files
+
+    **Sample data reference:**
+
+    For examples of expected input formats, see: [RAW CDR new format](https://techbrosgmbhduesseldorf.sharepoint.com/sites/BackofficeCDRPhase3/Freigegebene%20Dokumente/Forms/AllItems.aspx?id=%2Fsites%2FBackofficeCDRPhase3%2FFreigegebene%20Dokumente%2FBackoffice%20CDR%20Phase%203%2FRepository%20EDATools%202025%2FSample%20CDR%20%28Sing%20%26%20Austria%20New%20Format%29%2FRAW%20CDR%20New%20Format&viewid=69e60144%2D9189%2D45cb%2D85bf%2D9042cb52ce53&p=true&ga=1)
+
+    Args:
+
+        files: Raw Excel files containing test data. Each filename must include
+               a recognizable test type keyword for automatic processing.
+
+    Returns:
+
+        A ZIP file download with fully processed, analysis-ready Excel files
+        organized by test type and country.
+
+    Error cases:
+
+        - 400: No files uploaded, empty files, or unrecognizable test type in filename
+
+        - 500: Processing pipeline failed (data format issues, processing errors)
+
+    **Performance note:**
+    Processing runs in parallel across different test types for optimal speed.
+    Large datasets may take a few minutes to complete.
     """
     if not files:
         raise HTTPException(400, "No files uploaded")
@@ -548,7 +673,7 @@ async def split_n_cleansing(
             type_test, outputs_dict = res  # outputs_dict: Dict[filename -> bytes]
             for final_name, excel_bytes in outputs_dict.items():
                 # Namespace the file inside the zip by type
-                safe_name = f"{type_test.upper()}__{final_name}"
+                safe_name = f"{type_test.upper()}_{final_name}"
                 zf.writestr(safe_name, excel_bytes)
 
     mem_zip.seek(0)

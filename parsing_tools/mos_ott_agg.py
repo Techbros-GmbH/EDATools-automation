@@ -14,7 +14,7 @@ from .parsing_config import (
 )
 
 class MOSOTTAggregator:
-    def __init__(self, mcc_mnc_df: pd.DataFrame | None = None, test_case_df=None):
+    def __init__(self, mcc_mnc_df: pd.DataFrame | None = None, test_case_df : pd.DataFrame | None = None):
         self.mcc_mnc_df = mcc_mnc_df
         self.test_case_df = test_case_df
 
