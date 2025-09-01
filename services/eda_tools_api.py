@@ -9,6 +9,7 @@ from io import BytesIO
 from typing import Dict, List, Tuple, Union
 
 import pandas as pd
+from loguru import logger
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -383,7 +384,7 @@ def _run_full_kqi_pipeline(
     agg_inputs: List[Tuple[BytesIO, str]] = [(BytesIO(b), fn) for (b, fn) in file_specs]
     aggregator = make_aggregator(type_test)
     agg_outputs = aggregator.process(agg_inputs)  # dict or single
-    agg_bytes_map = _normalize_to_bytes_map(agg_outputs)  # {name -> bytes}
+    agg_bytes_map = _normalize_to_bytes_map(agg_outputs)
 
     # ---------- 2) Clean / Packager ----------
     packager = make_packager(type_test)
@@ -391,21 +392,24 @@ def _run_full_kqi_pipeline(
         (BytesIO(b), name) for name, b in agg_bytes_map.items()
     ]
     pkg_outputs = packager.process(pkg_inputs)  # dict or single
-    clean_bytes_map = _normalize_to_bytes_map(pkg_outputs)  # {clean_name -> bytes}
+    clean_bytes_map = _normalize_to_bytes_map(pkg_outputs)
 
     # ---------- 3) KQI Summarization ----------
     factory = _KQI_FACTORY.get(type_test)
     if not factory:
         raise RuntimeError(f"No KQI summarizer for type '{type_test}'")
+    logger.debug(f"Using KQI factory: {factory}")
     summarizer = factory()
+
 
     # Some types may yield multiple cleaned files; summarize each then combine
     summaries = []
     for clean_name, excel_bytes in clean_bytes_map.items():
         df = pd.read_excel(BytesIO(excel_bytes))
+        logger.debug(f"df header: {df.columns.tolist()}")
         summary_df = summarizer.summarize(
             df
-        )  # each class in kqix implements summarize(df) -> DataFrame
+        )
         if isinstance(summary_df, pd.DataFrame) and not summary_df.empty:
             # Option A: one summary per input file
             # out_name = f"{Path(clean_name).stem}_KQI.xlsx"
@@ -492,45 +496,6 @@ def _run_aggregation(
         except Exception:
             return type_test, _df_to_excel_bytes(pd.DataFrame(outputs))
 
-
-def _run_kqi_summarize(
-    kqi_type: str,
-    file_specs: List[Tuple[bytes, str]],
-) -> Tuple[str, Dict[str, bytes]]:
-    """
-    Worker: merges all files for a kqi_type, runs the right summarizer, returns {filename -> bytes}.
-    """
-    # 1) Build DataFrame by concatenating all files for this type
-    frames: List[pd.DataFrame] = []
-    for b, fn in file_specs:
-        try:
-            df = pd.read_excel(BytesIO(b))
-            df["SourceFile"] = os.path.splitext(os.path.basename(fn))[0]
-            frames.append(df)
-        except Exception as e:
-            # Skip bad files but keep going
-            print(f"[KQI:{kqi_type}] Skip {fn}: {e}")
-
-    if not frames:
-        # Return empty excel so the caller can surface a sensible error
-        empty = pd.DataFrame()
-        return kqi_type, {f"{kqi_type.upper()}_KQI.xlsx": _df_to_excel_bytes(empty)}
-
-    df_all = pd.concat(frames, ignore_index=True)
-
-    # 2) Make summarizer
-    factory = _KQI_FACTORY.get(kqi_type)
-    if not factory:
-        raise RuntimeError(f"No KQI summarizer for type '{kqi_type}'")
-
-    summarizer = factory()
-
-    # 3) Run summary
-    summary_df = summarizer.summarize(df_all)
-    out_name = f"{kqi_type.upper()}_KQI.xlsx"
-    out_bytes = _df_to_excel_buf(summary_df)
-
-    return kqi_type, {out_name: out_bytes}
 
 
 @app.post("/v1/aggregator", tags=["endpoints"])

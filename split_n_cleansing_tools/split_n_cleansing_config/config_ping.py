@@ -267,6 +267,7 @@ PING_SCHEMA_GROUPS = {
         "Logfile Name",
         "Route Name",
         "Operator ",
+        "Type Mobility",
         "MNC",
         "Session Start Time",
         "Latitude",

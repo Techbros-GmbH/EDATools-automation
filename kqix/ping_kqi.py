@@ -14,18 +14,22 @@ class PingKQISummarizer(KQISummarizerBase):
         summary = []
 
         for (operator, test_name, mobility), group in df.groupby(
-            ["Operator", "Test Name", "Type Mobility"], dropna=False
+            ["Operator", "Test Name", "Type Mobility"]
         ):
             total = len(group)
-            success = group["Ping_Packet_Success_Rate"].astype(str).eq("100").sum()
+            success = group["Ping Packet Success Rate"].astype(str).eq("100").sum()
             failures = total - success
             success_ratio = round((success / total) * 100, 2) if total > 0 else 0
             trace_loss = (
                 round(
-                    (pd.to_numeric(group["Ping_Packet_Loss_Rate"], errors="coerce").fillna(0) > 0).sum()
-                    / total * 100, 2
-                ) if total > 0 else 0
+                (group["Ping Packet Loss Rate"].fillna(0).astype(float) > 0).sum()
+                / total
+                * 100,
+                2,
             )
+            if total > 0
+            else 0
+        )
 
             row = {
                 "Operator": operator,
@@ -40,7 +44,7 @@ class PingKQISummarizer(KQISummarizerBase):
             }
 
             for tech in TECHNOLOGY_KEYWORDS:
-                cnt = group["Technology_Detail"].astype(str).str.contains(tech, na=False).sum()
+                cnt = group["Session Start Technology"].astype(str).str.contains(tech, na=False).sum()
                 row[tech] = cnt
                 row[f"{tech} (%)"] = round(cnt / total, 4) if total > 0 else 0.0
 
