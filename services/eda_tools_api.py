@@ -107,23 +107,40 @@ def _run_split_n_cleansing(
     # 1) Aggregate
     agg = make_aggregator(type_test)
     agg_outputs = agg.process(rebuilt_specs)
-    # Normalize aggregator outputs to dict[str, bytes]
-    if isinstance(agg_outputs, BytesIO):
-        agg_outputs = {"output.xlsx": agg_outputs.getvalue()}
-    elif isinstance(agg_outputs, pd.DataFrame):
-        agg_outputs = {"output.xlsx": _df_to_excel_bytes(agg_outputs)}
-    elif not isinstance(agg_outputs, dict):
-        # best-effort
-        try:
-            agg_outputs = {"output.xlsx": agg_outputs.getvalue()}
-        except Exception:
-            agg_outputs = {"output.xlsx": _df_to_excel_bytes(pd.DataFrame(agg_outputs))}
 
-    # 2) Run packager: convert aggregated bytes into "files" expected by packagers
+    # --- Normalize aggregator outputs to dict[str, bytes] ---
+    norm: Dict[str, bytes] = {}
+    if isinstance(agg_outputs, dict):
+        for name, obj in agg_outputs.items():
+            if isinstance(obj, bytes):
+                norm[name] = obj
+            elif isinstance(obj, BytesIO):
+                norm[name] = obj.getvalue()
+            elif isinstance(obj, pd.DataFrame):
+                norm[name] = _df_to_excel_bytes(obj)
+            else:
+                # Best-effort: try file-like
+                try:
+                    norm[name] = obj.getvalue()
+                except Exception:
+                    norm[name] = _df_to_excel_bytes(pd.DataFrame(obj))
+    else:
+        # Single output cases
+        if isinstance(agg_outputs, bytes):
+            norm["output.xlsx"] = agg_outputs
+        elif isinstance(agg_outputs, BytesIO):
+            norm["output.xlsx"] = agg_outputs.getvalue()
+        elif isinstance(agg_outputs, pd.DataFrame):
+            norm["output.xlsx"] = _df_to_excel_bytes(agg_outputs)
+        else:
+            try:
+                norm["output.xlsx"] = agg_outputs.getvalue()
+            except Exception:
+                norm["output.xlsx"] = _df_to_excel_bytes(pd.DataFrame(agg_outputs))
+
+    # 2) Run packager: convert normalized bytes into BytesIO for packager input
     pkg = make_packager(type_test)
-    pkg_inputs: List[Tuple[BytesIO, str]] = []
-    for name, excel_bytes in agg_outputs.items():
-        pkg_inputs.append((BytesIO(excel_bytes), name))
+    pkg_inputs: List[Tuple[BytesIO, str]] = [(BytesIO(b), name) for name, b in norm.items()]
 
     pkg_outputs = pkg.process(pkg_inputs)
 
@@ -131,7 +148,9 @@ def _run_split_n_cleansing(
     out: Dict[str, bytes] = {}
     if isinstance(pkg_outputs, dict):
         for final_name, obj in pkg_outputs.items():
-            if isinstance(obj, BytesIO):
+            if isinstance(obj, bytes):
+                out[final_name] = obj
+            elif isinstance(obj, BytesIO):
                 out[final_name] = obj.getvalue()
             elif isinstance(obj, pd.DataFrame):
                 out[final_name] = _df_to_excel_bytes(obj)
@@ -141,9 +160,11 @@ def _run_split_n_cleansing(
                 except Exception:
                     out[final_name] = _df_to_excel_bytes(pd.DataFrame(obj))
     else:
-        # Single output (rare in packagers, but keep parity)
+        # Single output fallback
         final_name = f"{type_test.upper()}_clean.xlsx"
-        if isinstance(pkg_outputs, BytesIO):
+        if isinstance(pkg_outputs, bytes):
+            out[final_name] = pkg_outputs
+        elif isinstance(pkg_outputs, BytesIO):
             out[final_name] = pkg_outputs.getvalue()
         elif isinstance(pkg_outputs, pd.DataFrame):
             out[final_name] = _df_to_excel_bytes(pkg_outputs)
@@ -154,6 +175,7 @@ def _run_split_n_cleansing(
                 out[final_name] = _df_to_excel_bytes(pd.DataFrame(pkg_outputs))
 
     return type_test, out
+
 
 def _run_packager_only(
     type_test: str,
