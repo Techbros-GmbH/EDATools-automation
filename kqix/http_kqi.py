@@ -12,14 +12,14 @@ class HttpKQISummarizer(KQISummarizerBase):
         df = df.copy()
         df.columns = df.columns.str.strip()
 
-        throughput_col = "HttpMeanDataRate"
-        ulthroughput_col = "HTTP_Upload_Average_Throughput"
-        status_col = "HttpServiceStatus"
+        throughput_col = "Http Mean Data Rate"
+        ulthroughput_col = "HTTP Download Average Throughput"
+        status_col = "HTTP Service Status"
         mobility_col = "Type Mobility"
-        tech_col = "Technology_Detail"
+        tech_col = "Session Start Technology"
         test_col = "Test Name"
-        browsing_col = "HttpDataTransferTime"
-        setup_time_col = "HttpIpServiceSetupTime"
+        browsing_col = "HTTP Data Transfer Time"
+        setup_time_col = "HTTP IP Service Setup Time"
 
         summary = []
         for (operator, test_name, mobility), group in df.groupby(

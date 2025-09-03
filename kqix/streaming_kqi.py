@@ -14,10 +14,10 @@ class StreamingKQISummarizer(KQISummarizerBase):
         summary = []
 
         for (operator, test_name, mobility), group in df.groupby(
-            ["Operator", "Test Name", "Type Mobility"], dropna=False
+            ["Operator", "Test Name", "Session Start Technology"], dropna=False
         ):
             total = len(group)
-            success = group["Streaming_Success_Rate"].astype(str).eq("100").sum()
+            success = group["Streaming Success Rate"].astype(str).eq("100").sum()
             failures = total - success
             success_ratio = round((success / total) * 100, 2) if total > 0 else 0
 
@@ -34,7 +34,7 @@ class StreamingKQISummarizer(KQISummarizerBase):
             }
 
             for tech in TECHNOLOGY_KEYWORDS:
-                cnt = group["Technology_Detail"].astype(str).str.contains(tech, na=False).sum()
+                cnt = group["Session Start Technology"].astype(str).str.contains(tech, na=False).sum()
                 row[tech] = cnt
                 row[f"{tech} (%)"] = round(cnt / total, 4) if total > 0 else 0.0
 
