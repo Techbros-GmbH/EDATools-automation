@@ -36,8 +36,14 @@ A comprehensive FastAPI application for automating telecommunications test data 
 ### 1. Clone the Repository
 
 ```bash
-git clone <repository-url>
+git clone -b feature-fastapi https://github.com/Techbros-GmbH/EDATools-automation.git
 cd eda-tools-automation
+```
+
+### 1.1 Pull the Repository (if it has an update)
+
+```bash
+git pull
 ```
 
 ### 2. Create Virtual Environment (Recommended)
