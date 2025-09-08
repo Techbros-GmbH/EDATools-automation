@@ -419,11 +419,14 @@ def _run_full_kqi_pipeline(
     if not summaries:
         # Make sure we still return a valid (maybe empty) summary workbook
         empty = pd.DataFrame()
-        return type_test, {f"{type_test.upper()}_KQI.xlsx": _df_to_excel_bytes(empty)}
+        result_map = dict(clean_bytes_map)
+        result_map[f"{type_test.upper()}_KQI.xlsx"] = _df_to_excel_bytes(empty)
+        return type_test, result_map
 
-    # Default behavior: concatenate all summaries for the type into one file
     combined = pd.concat(summaries, ignore_index=True)
-    return type_test, {f"{type_test.upper()}_KQI.xlsx": _df_to_excel_bytes(combined)}
+    result_map = dict(clean_bytes_map)
+    result_map[f"{type_test.upper()}_KQI.xlsx"] = _df_to_excel_bytes(combined)
+    return type_test, result_map
 
 
 def _df_to_excel_bytes(df: pd.DataFrame) -> bytes:
